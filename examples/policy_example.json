@@ -1,0 +1,25 @@
+{
+  "policy_version": "2026.06.1",
+  "required_telemetry_fields": [
+    "event_id",
+    "endpoint_id",
+    "user_id",
+    "tenant_id",
+    "endpoint_state",
+    "identity_state",
+    "case_state",
+    "tenant_policy_state"
+  ],
+  "invalid_path_response": "DECOY",
+  "minimum_composite_score": 1.0,
+  "protected_actions": [
+    "decrypt_artifact",
+    "isolate_endpoint",
+    "execute_remediation_script"
+  ],
+  "deception": {
+    "decoy_type": "honeytoken_artifact",
+    "log_evidence": true,
+    "optional_containment": true
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "graph_id": "graph-demo-001",
+  "policy_version": "2026.06.1",
+  "start_node": "endpoint_enrolled",
+  "allowed_actions": {
+    "decrypt_artifact": "case_authorized",
+    "isolate_endpoint": "incident_confirmed"
+  },
+  "nodes": [
+    "endpoint_enrolled",
+    "identity_verified",
+    "case_open",
+    "case_authorized",
+    "incident_confirmed"
+  ],
+  "edges": [
+    {
+      "from": "endpoint_enrolled",
+      "to": "identity_verified",
+      "required_conditions": {
+        "endpoint_state": "enrolled",
+        "identity_state": "authenticated"
+      },
+      "risk_threshold": 0.7
+    },
+    {
+      "from": "identity_verified",
+      "to": "case_open",
+      "required_conditions": {
+        "case_state": "open"
+      },
+      "risk_threshold": 0.8
+    },
+    {
+      "from": "case_open",
+      "to": "case_authorized",
+      "required_conditions": {
+        "tenant_policy_state": "approved"
+      },
+      "risk_threshold": 0.85
+    },
+    {
+      "from": "endpoint_enrolled",
+      "to": "incident_confirmed",
+      "required_conditions": {
+        "alert_state": "confirmed_malware"
+      },
+      "risk_threshold": 0.9
+    }
+  ]
+}

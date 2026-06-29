@@ -1,0 +1,27 @@
+{
+  "event_id": "evt-1001",
+  "timestamp": "2026-06-23T18:45:00Z",
+  "tenant_id": "tenant-alpha",
+  "endpoint_id": "endpoint-42",
+  "user_id": "analyst-7",
+  "session_id": "sess-991",
+  "process_id": "pid-2201",
+  "parent_process_id": "pid-1100",
+  "workload_id": "wl-soc-console",
+  "source": "endpoint_agent",
+  "event_type": "protected_action_request",
+  "verdict": "pending",
+  "confidence": 0.92,
+  "endpoint_state": "enrolled",
+  "identity_state": "authenticated",
+  "process_lineage_state": "expected",
+  "network_state": "corporate_vpn",
+  "workload_state": "managed",
+  "alert_state": "none",
+  "case_state": "open",
+  "tenant_policy_state": "approved",
+  "risk_score": 0.35,
+  "raw_attributes": {
+    "requested_artifact": "memory_dump_42.bin.enc"
+  }
+}

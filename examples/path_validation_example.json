@@ -1,0 +1,69 @@
+{
+  "scenarios": [
+    {
+      "name": "valid_decrypt_path",
+      "requested_action": "decrypt_artifact",
+      "observed_nodes": [
+        "endpoint_enrolled",
+        "identity_verified",
+        "case_open",
+        "case_authorized"
+      ],
+      "key_binding_valid": true,
+      "expected_decision": "ALLOW"
+    },
+    {
+      "name": "skipped_case_state",
+      "requested_action": "decrypt_artifact",
+      "observed_nodes": [
+        "endpoint_enrolled",
+        "identity_verified",
+        "case_authorized"
+      ],
+      "key_binding_valid": true,
+      "expected_decision": "DECOY"
+    },
+    {
+      "name": "unknown_endpoint_replay",
+      "requested_action": "decrypt_artifact",
+      "observed_nodes": [
+        "endpoint_enrolled",
+        "identity_verified",
+        "case_open",
+        "case_authorized"
+      ],
+      "telemetry_overrides": {
+        "endpoint_state": "unknown",
+        "event_id": "evt-replay-77"
+      },
+      "key_binding_valid": true,
+      "expected_decision": "DECOY"
+    },
+    {
+      "name": "valid_isolation_path",
+      "requested_action": "isolate_endpoint",
+      "observed_nodes": [
+        "endpoint_enrolled",
+        "incident_confirmed"
+      ],
+      "telemetry_overrides": {
+        "alert_state": "confirmed_malware",
+        "risk_score": 0.55
+      },
+      "key_binding_valid": true,
+      "expected_decision": "ALLOW"
+    },
+    {
+      "name": "missing_key_binding",
+      "requested_action": "decrypt_artifact",
+      "observed_nodes": [
+        "endpoint_enrolled",
+        "identity_verified",
+        "case_open",
+        "case_authorized"
+      ],
+      "key_binding_valid": false,
+      "expected_decision": "DECOY"
+    }
+  ]
+}
