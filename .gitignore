@@ -13,8 +13,7 @@ htmlcov/
 .DS_Store
 ._*
 
-# Local tooling
-.cursor/
+# Local IDE/tooling artifacts (see public release doctrine section 4)
 .githooks/
 
 # Generated validation artifacts

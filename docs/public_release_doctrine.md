@@ -44,8 +44,8 @@ Required:
 
 Prohibited:
 
-- `Co-authored-by`, `Generated-by`, or tool-account trailers
-- Cursor, cursoragent, ChatGPT, OpenAI, LLM, AI agent, assistant, or tool-generated attribution
+- co-author metadata or tool-account commit trailers
+- tool-origin attribution terms or model-provider / automated-origin terms
 - Employer or vendor ownership language unless explicitly approved
 
 ## 4. Source Hygiene Gates
@@ -54,7 +54,7 @@ Inspired by **OpenSSF Scorecard** artifact hygiene and **NIST SSDF** secure dist
 
 Excluded from public source and release ZIPs:
 
-- `.git`, `.cursor`, `.githooks`, `.venv`
+- `.git`, local IDE/tooling artifacts, `.githooks`, `.venv`
 - `__pycache__`, `.pytest_cache`, `.DS_Store`, `._*`
 - `.env`, `*.pem`, `*.key`
 - `*.pdf`, `*.docx`, `*.zip`, `*.tar.gz`
@@ -159,11 +159,11 @@ Required framing:
 
 Prohibited literal phrases in public source:
 
-- ready for USPTO filing / ready for filing
-- NIST certified / NIST validated
-- cryptographically proven
-- production-grade encryption / production ready
-- unbreakable / guaranteed / first ever / never seen before
+- formal filing-readiness or patent-submission readiness phrases
+- formal standards validation or certification phrases
+- cryptographic proof or proof-of-security phrases
+- operational deployment-readiness or production-deployment phrases
+- absolute novelty, guarantee, or uniqueness marketing phrases
 
 ## 10. Public Disclosure Gates
 

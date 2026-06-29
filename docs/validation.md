@@ -33,7 +33,7 @@ docker compose run --rm app make demo
 
 Expected: all tests pass, including state-tree scenarios in `tests/test_state_tree.py`.
 
-Current baseline: 43 tests (including state-tree and statistical harness regression tests).
+Current baseline: 50 tests (including state-tree and statistical harness regression tests).
 
 ### Proof pipeline
 
@@ -56,6 +56,8 @@ Each statistical test reports one of:
 - `PASS`: valid p-value meeting the prototype threshold
 - `FAIL`: valid p-value below the prototype threshold
 - `ERROR`: invalid test output, unsupported input, or harness bug (for example p-value outside `[0, 1]`)
+
+The Serial test reports `serial_p1`, `serial_p2`, and an aggregate `serial` line using the stricter minimum p-value. Deltas use the full three-psi formulation (`psi_m`, `psi_m1`, `psi_m2`).
 
 ### State-tree demo
 

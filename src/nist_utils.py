@@ -276,6 +276,71 @@ def longest_run_ones_test(
     return _finalize_test(raw)
 
 
+def _serial_test_components(bits: List[int], m: int = 2) -> Dict[str, float]:
+    """Compute Serial test psi statistics, deltas, and raw p-values."""
+    psi_m = _psi_squared(m, bits)
+    psi_m1 = _psi_squared(m - 1, bits)
+    psi_m2 = _psi_squared(m - 2, bits)
+    del1 = psi_m - psi_m1
+    del2 = psi_m - 2.0 * psi_m1 + psi_m2
+    p1 = _igamc((2 ** (m - 1)) / 2.0, del1 / 2.0)
+    p2 = _igamc((2 ** (m - 2)) / 2.0, del2 / 2.0)
+    return {
+        "psi_m": psi_m,
+        "psi_m1": psi_m1,
+        "psi_m2": psi_m2,
+        "del1": del1,
+        "del2": del2,
+        "p1": p1,
+        "p2": p2,
+    }
+
+
+def _finalize_serial_test(
+    p1: float, p2: float
+) -> Tuple[float, TestStatus, Optional[str], float, TestStatus, Optional[str], TestStatus, Optional[str]]:
+    """Classify Serial p1/p2 and aggregate status using the stricter minimum p-value."""
+    p1_value, p1_status, p1_reason, p1_raw = _finalize_test(p1)
+    p2_value, p2_status, p2_reason, p2_raw = _finalize_test(p2)
+
+    if p1_status == "ERROR":
+        return (
+            p1_value,
+            "ERROR",
+            f"serial p1: {p1_reason}",
+            p1_raw,
+            p1_status,
+            p1_reason,
+            p2_status,
+            p2_reason,
+        )
+    if p2_status == "ERROR":
+        return (
+            p2_value,
+            "ERROR",
+            f"serial p2: {p2_reason}",
+            p2_raw,
+            p1_status,
+            p1_reason,
+            p2_status,
+            p2_reason,
+        )
+
+    raw = min(p1_raw, p2_raw)
+    if raw >= P_VALUE_THRESHOLD:
+        return raw, "PASS", None, raw, p1_status, p1_reason, p2_status, p2_reason
+    return (
+        raw,
+        "FAIL",
+        f"p-value {raw:.6f} below threshold {P_VALUE_THRESHOLD}",
+        raw,
+        p1_status,
+        p1_reason,
+        p2_status,
+        p2_reason,
+    )
+
+
 def serial_test(bits: List[int], m: int = 2) -> Tuple[float, TestStatus, Optional[str], float]:
     """Serial test using NIST SP 800-22 psi-squared and igamc (circular patterns)."""
     n = len(bits)
@@ -284,30 +349,29 @@ def serial_test(bits: List[int], m: int = 2) -> Tuple[float, TestStatus, Optiona
     if m < 2:
         return 0.0, "ERROR", "serial test requires m >= 2", 0.0
 
-    psi_m1 = _psi_squared(m - 1, bits)
-    psi_m = _psi_squared(m, bits)
-    del1 = -psi_m1
-    del2 = psi_m - 2.0 * psi_m1
-
-    p1 = _igamc((2 ** (m - 1)) / 2.0, del1 / 2.0)
-    p2 = _igamc((2 ** (m - 2)) / 2.0, del2 / 2.0)
-    raw = min(p1, p2)
-    return _finalize_test(raw)
+    comp = _serial_test_components(bits, m)
+    p_value, status, reason, raw, _, _, _, _ = _finalize_serial_test(comp["p1"], comp["p2"])
+    return p_value, status, reason, raw
 
 
 def run_statistical_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool, Optional[str], TestStatus]]]:
     """Run five prototype statistical tests inspired by NIST SP 800-22."""
     bits = _bits_from_bytes(data)
 
+    serial_comp = _serial_test_components(bits, 2)
+    serial_pv, serial_status, serial_reason, serial_raw, p1_status, p1_reason, p2_status, p2_reason = (
+        _finalize_serial_test(serial_comp["p1"], serial_comp["p2"])
+    )
+
     tests = {
         "monobit": monobit_test(bits),
         "block_frequency": block_frequency_test(bits, 128),
         "runs": runs_test(bits),
         "longest_run_ones": longest_run_ones_test(bits, 128),
-        "serial": serial_test(bits, 2),
+        "serial": (serial_pv, serial_status, serial_reason, serial_raw),
     }
 
-    return {
+    results = {
         name: {
             "p_value": pv,
             "raw_p_value": raw_p,
@@ -318,6 +382,29 @@ def run_statistical_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool,
         }
         for name, (pv, status, reason, raw_p) in tests.items()
     }
+
+    p1_raw = serial_comp["p1"]
+    p2_raw = serial_comp["p2"]
+    p1_value, p1_valid, _ = _validate_p_value(p1_raw)
+    p2_value, p2_valid, _ = _validate_p_value(p2_raw)
+    results["serial"].update(
+        {
+            "serial_p1": p1_value if p1_valid else p1_raw,
+            "serial_p2": p2_value if p2_valid else p2_raw,
+            "serial_p1_raw": p1_raw,
+            "serial_p2_raw": p2_raw,
+            "serial_p1_status": p1_status,
+            "serial_p2_status": p2_status,
+            "serial_p1_reason": p1_reason,
+            "serial_p2_reason": p2_reason,
+            "psi_m": serial_comp["psi_m"],
+            "psi_m1": serial_comp["psi_m1"],
+            "psi_m2": serial_comp["psi_m2"],
+            "del1": serial_comp["del1"],
+            "del2": serial_comp["del2"],
+        }
+    )
+    return results
 
 
 def run_nist_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool, Optional[str], TestStatus]]]:
@@ -331,6 +418,24 @@ def format_statistical_results(
     """Format statistical test results as human-readable lines."""
     lines = []
     for name, info in results.items():
+        if name == "serial":
+            p1_status = str(info.get("serial_p1_status", info.get("status", "FAIL")))
+            p2_status = str(info.get("serial_p2_status", info.get("status", "FAIL")))
+            p1 = float(info.get("serial_p1_raw", info["p_value"]))
+            p2 = float(info.get("serial_p2_raw", info["p_value"]))
+            lines.append(f"  serial_p1: p={p1:.6f} [{p1_status}]")
+            lines.append(f"  serial_p2: p={p2:.6f} [{p2_status}]")
+            status = str(info.get("status", "FAIL"))
+            line = (
+                f"  serial: p={info['p_value']:.6f} [{status}] "
+                "(minimum of serial_p1 and serial_p2)"
+            )
+            reason = info.get("fail_reason")
+            if reason:
+                line += f" ({reason})"
+            lines.append(line)
+            continue
+
         status = str(info.get("status", "FAIL"))
         line = f"  {name}: p={info['p_value']:.6f} [{status}]"
         reason = info.get("fail_reason")

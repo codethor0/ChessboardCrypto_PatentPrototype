@@ -17,6 +17,7 @@ from src.cipher import generate_keystream
 from src.nist_utils import (
     P_VALUE_THRESHOLD,
     _finalize_test,
+    _serial_test_components,
     _validate_p_value,
     run_statistical_suite,
     serial_test,
@@ -90,6 +91,111 @@ def test_serial_test_p_value_in_range() -> None:
     assert raw_p <= 1.0
 
 
+def test_serial_test_uses_full_delta_formula() -> None:
+    """Serial test must compute psi_m, psi_m1, psi_m2 and full del1/del2 deltas."""
+    sbox = generate_sbox("XYZ")
+    bits = _bits_from_bytes(generate_keystream(10 * 1024, sbox))
+    comp = _serial_test_components(bits, 2)
+    assert comp["del1"] == comp["psi_m"] - comp["psi_m1"]
+    assert comp["del2"] == comp["psi_m"] - 2.0 * comp["psi_m1"] + comp["psi_m2"]
+
+
+def test_serial_test_demo_regression_values() -> None:
+    """Serial statistics for the demo keystream must match the corrected audit values."""
+    sbox = generate_sbox("XYZ")
+    bits = _bits_from_bytes(generate_keystream(10 * 1024, sbox))
+    comp = _serial_test_components(bits, 2)
+    assert comp["psi_m"] == 1.0797851562529104
+    assert comp["psi_m1"] == 0.538330078125
+    assert comp["psi_m2"] == 0.0
+    assert comp["del1"] == 0.5414550781279104
+    assert comp["del2"] == 0.003125000002910383
+    assert abs(comp["p1"] - 0.7628243079189491) < 1e-9
+    assert abs(comp["p2"] - 0.9554201169728261) < 1e-9
+
+
+def test_serial_test_cannot_return_p_above_one() -> None:
+    """Serial aggregate and component p-values must never exceed 1."""
+    sbox = generate_sbox("XYZ")
+    bits = _bits_from_bytes(generate_keystream(10 * 1024, sbox))
+    results = run_statistical_suite(generate_keystream(10 * 1024, sbox))
+    serial = results["serial"]
+    assert float(serial["serial_p1_raw"]) <= 1.0
+    assert float(serial["serial_p2_raw"]) <= 1.0
+    assert float(serial["raw_p_value"]) <= 1.0
+
+
+def test_serial_invalid_p_value_classifies_as_error(monkeypatch) -> None:
+    """Invalid Serial p-values must classify as ERROR, not FAIL."""
+    from src import nist_utils
+
+    def fake_components(bits, m=2):
+        return {
+            "psi_m": 0.0,
+            "psi_m1": 0.0,
+            "psi_m2": 0.0,
+            "del1": 0.0,
+            "del2": 0.0,
+            "p1": 1.5,
+            "p2": 0.5,
+        }
+
+    monkeypatch.setattr(nist_utils, "_serial_test_components", fake_components)
+    p_value, status, reason, raw_p = serial_test([0, 1] * 64, 2)
+    assert status == "ERROR"
+    assert raw_p == 1.5
+    assert reason is not None
+
+
+def test_run_full_proof_exits_nonzero_on_statistical_error(monkeypatch) -> None:
+    """run_full_proof.py must exit nonzero when a statistical test reports ERROR."""
+    if os.environ.get("CHESSBOARD_PROOF_CHILD"):
+        return
+
+    from src import nist_utils
+
+    def fake_suite(data):
+        results = run_statistical_suite(data)
+        results["serial"]["status"] = "ERROR"
+        results["serial"]["pass"] = False
+        results["serial"]["fail_reason"] = "invalid p-value"
+        return results
+
+    monkeypatch.setattr(nist_utils, "run_statistical_suite", fake_suite)
+    import run_full_proof
+
+    monkeypatch.setattr(run_full_proof, "run_statistical_suite", fake_suite)
+    assert run_full_proof.main() != 0
+
+
+def test_run_full_proof_exits_nonzero_on_statistical_fail(monkeypatch) -> None:
+    """run_full_proof.py must exit nonzero when a statistical test reports FAIL."""
+    if os.environ.get("CHESSBOARD_PROOF_CHILD"):
+        return
+
+    from src import nist_utils
+
+    def fake_suite(data):
+        results = run_statistical_suite(data)
+        results["monobit"]["status"] = "FAIL"
+        results["monobit"]["pass"] = False
+        results["monobit"]["fail_reason"] = "below threshold"
+        return results
+
+    monkeypatch.setattr(nist_utils, "run_statistical_suite", fake_suite)
+    import run_full_proof
+
+    monkeypatch.setattr(run_full_proof, "run_statistical_suite", fake_suite)
+    assert run_full_proof.main() != 0
+
+
+def test_make_proof_propagates_failure() -> None:
+    """make proof must propagate run_full_proof.py exit status (no ignore prefix)."""
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    assert "-$(PYTHON) run_full_proof.py" not in makefile
+    assert "$(PYTHON) run_full_proof.py" in makefile
+
+
 def test_statistical_suite_all_p_values_in_range() -> None:
     """All statistical tests must report valid p-values in [0, 1]."""
     sbox = generate_sbox("XYZ")
@@ -128,6 +234,7 @@ def test_run_full_proof_serial_not_error() -> None:
         capture_output=True,
         text=True,
     )
-    assert "serial:" in result.stdout
+    assert "serial_p1:" in result.stdout
+    assert "serial_p2:" in result.stdout
     assert "serial: p=" in result.stdout
-    assert "[ERROR]" not in result.stdout.split("serial:")[1].split("\n")[0]
+    assert "[ERROR]" not in result.stdout.split("serial_p1:")[1].split("\n")[0]
