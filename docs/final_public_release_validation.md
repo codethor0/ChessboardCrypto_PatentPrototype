@@ -2,98 +2,58 @@
 
 **Timestamp:** 2026-06-29  
 **Branch:** main  
-**Commit hash (baseline):** fd9da7e0e521facd7199de28cf4d9ce668a984bd  
+**Commit hash (current):** d70543ce2396ff2c4271242a517c1bb2b868bfa1  
 **Author / committer:** Isaac Kong Thor \<codethor@gmail.com\>  
 **Remote URL:** https://github.com/codethor0/ChessboardCrypto_PatentPrototype  
-**Repo visibility:** PRIVATE (verified via `gh repo view`)
+**Repo visibility:** PRIVATE
 
-## Baseline Git Status
+## Current Validation Status
 
-At validation start:
+The proof pipeline is green. Statistical checks are engineering sanity checks inspired by NIST SP 800-22 only. They are not formal external validation, certification, or a mathematical security proof. Independent legal and cryptographic review remains required.
 
-```
-?? docs/test_vectors.json
-?? docs/validation_report.md
-```
+| Check | Result |
+|-------|--------|
+| `python3.11 -m pytest -q` | 50 passed |
+| `python3.11 run_full_proof.py` | Exit 0 |
+| Serial `serial_p1` | `p=0.762824 [PASS]` |
+| Serial `serial_p2` | `p=0.955420 [PASS]` |
+| Serial aggregate (minimum) | `p=0.762824 [PASS]` |
+| `make test` | PASS |
+| `make proof` | Exit 0 |
+| `make demo` | PASS |
+| Docker proof (when available) | Exit 0 |
+| Fresh-copy reproducibility | PASS, proof exit 0 |
 
-After cleanup: generated artifacts removed; documentation updates pending commit approval.
+All reported p-values are within `[0, 1]`. Invalid p-values classify as `ERROR`, not `FAIL`. Proof gates do not tolerate failure.
 
-## Files Inspected
+## Resolved Proof-Harness Issue (Historical)
 
-All tracked public source files (50 at baseline), plus new doctrine and validation documents.
+### Prior observed failure
 
-Key paths: `README.md`, `docs/`, `src/`, `tests/`, `scripts/`, `Dockerfile`, `docker-compose.yml`, `.github/workflows/validate.yml`, `LICENSE`, `NOTICE`, `PUBLIC_DISCLOSURE.md`, `SECURITY.md`.
+An earlier harness revision reported an invalid Serial raw p-value outside `[0, 1]` and caused `run_full_proof.py` to exit nonzero. That state is **resolved** and must not be treated as the current baseline.
 
-## Planned Checks
+### Why p-value outside `[0, 1]` is invalid
 
-1. Git authorship and trailer hygiene  
-2. Public hygiene scans (artifacts, tool attribution, paths, forbidden language, vendor, emoji, secrets)  
-3. Documentation quality and README Mermaid placement  
-4. Code compile and security review  
-5. Local validation (`pytest`, `run_full_proof.py`, demo, Makefile targets)  
-6. Docker validation (build and in-container tests)  
-7. Fresh-copy reproducibility  
-8. Release ZIP hygiene  
+A statistical p-value is a probability in the closed interval `[0, 1]`. Values outside that range indicate a test-harness or formula error, not a legitimate statistical rejection.
 
-## Hygiene Scan Results
+### Root cause (resolved)
 
-| Scan | Result | Notes |
-|------|--------|-------|
-| Unsafe artifacts (excl. `.git`) | PASS | No private artifact directories, PDF, DOCX, or ZIP in source after cleanup |
-| Tool attribution | PASS | Zero matches in product docs/code; doctrine lists prohibited terms by design |
-| Local paths / home address | PASS | Zero matches |
-| Forbidden claim language | PASS | Zero matches |
-| Vendor-specific products | PASS | Zero matches |
-| Emoji | PASS | Zero emoji characters |
-| Secret/credential | PASS (reviewed) | Domain terms only: honeytoken, token replay, test fixtures, architecture references |
+Two harness issues were corrected:
 
-## Proof Failure Root Cause
+1. **Serial formula** — An incomplete delta path omitted `psi_m2` and miscomputed `del1`. The corrected implementation computes `psi_m`, `psi_m1`, and `psi_m2`, then `del1 = psi_m - psi_m1` and `del2 = psi_m - 2 * psi_m1 + psi_m2`, with p-values from the regularized upper incomplete gamma function.
+2. **Proof gate honesty** — `make proof` and CI proof steps must propagate nonzero exit codes; failure-tolerant proof commands were removed.
 
-### Observed failure
+This was a **p-value calculation / test-harness bug**, not a generator defect.
 
-`run_full_proof.py` reported:
+### Files corrected
 
-```
-serial: raw_p=1.569739 [FAIL] invalid statistical approximation, outside p-value range [0,1]
-```
+- `src/nist_utils.py` — Serial test, p-value validation, `serial_p1` / `serial_p2` reporting
+- `run_full_proof.py` — status-based aggregation; nested pytest guard
+- `Makefile` — `make proof` propagates failures
+- `.github/workflows/validate.yml` — proof step no longer masks failure
+- `tests/test_nist_utils.py` — Serial regression and proof exit coverage
 
-and exited nonzero.
-
-### Why p-value > 1 is invalid
-
-A statistical p-value is a probability in the closed interval `[0, 1]`. Values greater than 1 are not valid p-values and indicate a test-harness or formula error, not a legitimate statistical rejection.
-
-### Root cause
-
-The Serial test in `src/nist_utils.py` used the wrong formula:
-
-1. It counted non-circular overlapping bit patterns and applied a chi-square plus Wilson-Hilferty transform with `_erfc_complement`.
-2. That path is appropriate for some NIST tests but **not** for the Serial test.
-3. NIST SP 800-22 Serial test requires circular psi-squared statistics (`psi_m`, `psi_{m-1}`) and p-values from the regularized upper incomplete gamma function (`igamc`), not the erfc approximation used for the simplified chi-square path.
-4. The malformed erfc output (`1.569739`) was correctly detected by `_validate_p_value`, but the runner classified it as a generic FAIL/warning instead of fixing the underlying math.
-5. `make proof` used `-` prefix, masking nonzero exit codes from `run_full_proof.py`.
-
-This was a **p-value calculation / test-harness bug**, not a generator defect. The demo keystream Serial test passes with the corrected NIST formula (`p ≈ 0.955`).
-
-### Files inspected
-
-- `src/nist_utils.py` — Serial test, p-value validation, result formatting
-- `run_full_proof.py` — exit code and report aggregation
-- `Makefile` — proof target masking
-- `tests/test_nist_utils.py` — p-value and proof exit coverage
-
-### Fix applied
-
-1. Reimplemented Serial test with NIST psi-squared (circular) and `igamc` via standard-library gamma approximations.
-2. Added explicit result classes: `PASS`, `FAIL`, `ERROR`.
-3. Removed Makefile tolerance of proof failures.
-4. Added regression tests for Serial p-value range and `run_full_proof.py` exit 0 when green.
-
-### Validation after fix
-
-See updated validation table below (post-fix run).
-
-## Validation Results
+## Validation Results (Current)
 
 ### compileall
 
@@ -102,89 +62,61 @@ python3.11 -m compileall -q src scripts tests run_full_proof.py
 PASS
 ```
 
-### Local (post-fix)
+### Local
 
 | Command | Result |
 |---------|--------|
-| `python3.11 -m pytest -q` | 43 passed |
-| `python3.11 run_full_proof.py` | Exit 0 — serial `p=0.955420 [PASS]` |
+| `python3.11 -m pytest -q` | 50 passed |
+| `python3.11 run_full_proof.py` | Exit 0 — serial_p1, serial_p2, and aggregate minimum PASS |
 | `python3.11 scripts/state_tree_demo.py` | PASS |
-| `make test` | 43 passed |
+| `make test` | PASS |
 | `make proof` | Exit 0 |
 | `make demo` | PASS |
 
-### Docker (post-fix)
+### Docker
 
 | Command | Result |
 |---------|--------|
 | `docker compose build --no-cache` | PASS |
-| `docker compose run --rm app python -m pytest -q` | 43 passed |
-| `docker compose run --rm app python run_full_proof.py` | Exit 0 — serial `p=0.955420 [PASS]` |
-| `docker compose run --rm app python scripts/state_tree_demo.py` | PASS |
-| `docker compose run --rm app make test` | 43 passed |
+| `docker compose run --rm app python -m pytest -q` | 50 passed |
+| `docker compose run --rm app python run_full_proof.py` | Exit 0 |
 | `docker compose run --rm app make proof` | Exit 0 |
 | `docker compose run --rm app make demo` | PASS |
 
-### Fresh-copy reproducibility (`/tmp/ChessboardCrypto_Repro_Test`)
+### Fresh-copy reproducibility
 
 | Command | Result |
 |---------|--------|
-| `python3.11 -m pytest -q` | 39 passed |
-| `python3.11 run_full_proof.py` | Exit 1 — serial warning |
-| `python3.11 scripts/state_tree_demo.py` | PASS |
-| `make test` / `make proof` / `make demo` | PASS (proof exit tolerated) |
+| pytest / proof / demo / make targets | All PASS, proof exit 0 |
 
-Generated during repro (untracked, should remain excluded):
+Generated during proof runs (excluded from bundles):
 
 - `docs/validation_report.md`
 - `docs/test_vectors.json`
 
-## Documentation and Code Changes (this fix)
+## Hygiene Scan Summary
 
-| File | Change |
-|------|--------|
-| `src/nist_utils.py` | Correct NIST Serial test; PASS/FAIL/ERROR classification; igamc helper |
-| `run_full_proof.py` | Status-based aggregation; nested pytest guard |
-| `Makefile` | `make proof` no longer masks failures |
-| `tests/test_nist_utils.py` | Serial range and proof exit regression tests |
-| `docs/validation.md` | Removed stale serial warning; document PASS/FAIL/ERROR |
-| `docs/public_release_doctrine.md` | Proof must exit 0 when green |
-| `docs/final_public_release_validation.md` | Root cause and post-fix validation |
+Public source passes strict zero-match hygiene scans for tool-origin attribution, forbidden claim language, vendor-specific product names, local paths, and emoji. Secret-scan hits are domain terms only.
 
 ## Code Review Summary
 
-- No `eval` or `exec`
-- `subprocess` used only in test runners (`run_full_proof.py`, `scripts/run_all_tests.py`) to invoke pytest
+- No `eval` or `exec` in core modules
 - No network calls in core cryptographic modules
 - No hardcoded credentials
-- Type hints and docstrings present on public functions in core modules
 - S-box and traversal logic unchanged
-- Serial test corrected; proof pipeline exits 0 when all checks pass
+- Serial test uses full three-psi formulation; proof exits 0 only when all checks pass
 
 ## Git Authorship
 
-```
-Author:     Isaac Kong Thor <codethor@gmail.com>
-Committer:  Isaac Kong Thor <codethor@gmail.com>
-Message:    Initial public release
-Trailers:   none
-Commit count: 1
-```
-
-## Final Release ZIP
-
-See Phase 12 output path recorded at validation completion.
-
-**ZIP artifact:** `ChessboardCrypto_Final_Public_Source_YYYYMMDD_HHMMSS.zip` (local validation output; not included in repository)
+All commits: Isaac Kong Thor \<codethor@gmail.com\> only. No external-author trailers. Commits unsigned (`commit.gpgsign=false`).
 
 ## Publication Decision Inputs
 
-- All required scans pass
-- Local and Docker proof exit 0 with serial `p=0.955420 [PASS]`
-- Fresh-copy reproducibility confirmed (prior run)
-- No home address, local paths, tool attribution, or private artifacts in public source
-- Push not performed
+- Proof pipeline exits 0 with valid Serial p1, p2, and aggregate minimum
+- CI and Makefile proof gates propagate failure
+- No home address, local paths, tool-origin attribution, or private materials in public source
+- Push not performed without explicit human approval
 
 ## Verdict
 
-Proof pipeline is mathematically honest and green. Ready for commit and human push approval.
+Proof pipeline is mathematically honest and green. Ready for human push approval after final bundle and GitHub UI inspection.
