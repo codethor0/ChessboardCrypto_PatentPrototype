@@ -27,7 +27,7 @@ A release candidate must pass all gates below before visibility is changed to pu
 | G2 | Zero tool attribution in history, source, and bundles |
 | G3 | Zero private artifacts, local paths, or home address |
 | G4 | All unit tests pass |
-| G5 | Documented serial statistical warning only; no hidden failures |
+| G5 | All statistical p-values valid; proof exits 0 only when all checks pass |
 | G6 | Docker validation passes or unavailability is recorded |
 | G7 | Documentation aligned with prototype behavior and limitations |
 | G8 | LICENSE remains all-rights-reserved unless explicitly changed by Isaac Kong Thor |
@@ -88,7 +88,13 @@ Required local results:
 ```bash
 python3.11 -m pytest -q          # 39 passed
 python3.11 scripts/state_tree_demo.py   # PASS
-python3.11 run_full_proof.py      # exit 1 allowed only for documented serial raw_p warning
+python3.11 run_full_proof.py      # exit 0 when all proof checks pass
+
+Statistical result classes:
+
+- `PASS`: valid p-value meeting threshold
+- `FAIL`: valid p-value below threshold
+- `ERROR`: invalid p-value outside `[0, 1]`, NaN, infinite, or unsupported test condition
 make test                         # PASS
 make proof                        # exit 1 tolerated only for same warning
 make demo                         # PASS
@@ -96,9 +102,7 @@ make demo                         # PASS
 
 Documented known limitation:
 
-- Serial statistical test may report `raw_p=1.569739 [FAIL]` because the prototype approximation can produce invalid raw p-values outside `[0, 1]`.
-
-Do not hide this warning. Do not claim formal NIST validation, certification, or cryptographic proof.
+Do not hide statistical failures. Do not treat invalid p-values outside `[0, 1]` as expected warnings.
 
 ## 7. Docker Reproducibility Gates
 
@@ -198,7 +202,7 @@ Required exclusions:
 - [ ] Hygiene scan: no excluded artifacts in public source
 - [ ] pytest: 39 passed
 - [ ] state_tree_demo: PASS
-- [ ] run_full_proof: documented serial warning only
+- [ ] run_full_proof: exit 0 with all checks PASS
 - [ ] Docker validation: pass or documented unavailable
 - [ ] Fresh-copy reproducibility: pass
 - [ ] README main flow diagram present

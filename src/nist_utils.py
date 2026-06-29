@@ -8,10 +8,12 @@ validation, certification, or proof of cryptographic security.
 """
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 # Minimum p-value for pass (significance level used in prototype checks)
 P_VALUE_THRESHOLD: float = 0.01
+
+TestStatus = Literal["PASS", "FAIL", "ERROR"]
 
 STATISTICAL_TEST_DISCLAIMER = (
     "Prototype statistical tests inspired by NIST SP 800-22. "
@@ -19,13 +21,8 @@ STATISTICAL_TEST_DISCLAIMER = (
 )
 
 
-def _clamp01(value: float) -> float:
-    """Clamp a numeric value to the closed interval [0.0, 1.0]."""
-    return max(0.0, min(1.0, value))
-
-
 def _validate_p_value(raw: float) -> Tuple[float, bool, Optional[str]]:
-    """Validate and normalize a raw p-value.
+    """Validate a raw p-value.
 
     Returns:
         Tuple of (reported_p_value, is_valid, failure_reason).
@@ -37,16 +34,82 @@ def _validate_p_value(raw: float) -> Tuple[float, bool, Optional[str]]:
     if raw < 0.0:
         return 0.0, False, f"invalid p-value: negative ({raw})"
     if raw > 1.0:
-        return raw, False, "invalid statistical approximation, outside p-value range [0,1]"
+        return raw, False, "invalid p-value: outside range [0,1]"
     return raw, True, None
 
 
-def _finalize_test(raw_p: float) -> Tuple[float, bool, Optional[str], float]:
-    """Return p-value, pass flag, optional reason, and raw computed value."""
+def _finalize_test(raw_p: float) -> Tuple[float, TestStatus, Optional[str], float]:
+    """Classify a computed p-value as PASS, FAIL, or ERROR."""
     p_value, is_valid, reason = _validate_p_value(raw_p)
     if not is_valid:
-        return p_value, False, reason, raw_p
-    return p_value, p_value >= P_VALUE_THRESHOLD, None, raw_p
+        return p_value, "ERROR", reason, raw_p
+    if p_value >= P_VALUE_THRESHOLD:
+        return p_value, "PASS", None, raw_p
+    return (
+        p_value,
+        "FAIL",
+        f"p-value {p_value:.6f} below threshold {P_VALUE_THRESHOLD}",
+        raw_p,
+    )
+
+
+def _gammainc_series(a: float, x: float) -> float:
+    """Lower regularized incomplete gamma P(a, x) via series expansion."""
+    if x <= 0.0:
+        return 0.0
+    ap = a
+    summ = 1.0 / a
+    del_ = summ
+    for _ in range(200):
+        ap += 1.0
+        del_ *= x / ap
+        summ += del_
+        if abs(del_) < abs(summ) * 1e-10:
+            break
+    return summ * math.exp(-x + a * math.log(x) - math.lgamma(a))
+
+
+def _gammainc_cf(a: float, x: float) -> float:
+    """Upper regularized incomplete gamma Q(a, x) via continued fraction."""
+    if x <= 0.0:
+        return 1.0
+    b = x + 1.0 - a
+    c = 1.0 / 1e-30
+    d = 1.0 / b
+    h = d
+    for i in range(1, 200):
+        an = -i * (i - a)
+        b += 2.0
+        d = an * d + b
+        if abs(d) < 1e-30:
+            d = 1e-30
+        c = b + an / c
+        if abs(c) < 1e-30:
+            c = 1e-30
+        d = 1.0 / d
+        del_ = d * c
+        h *= del_
+        if abs(del_ - 1.0) < 1e-10:
+            break
+    return h * math.exp(-x + a * math.log(x) - math.lgamma(a))
+
+
+def _gammainc(a: float, x: float) -> float:
+    """Regularized lower incomplete gamma P(a, x). Standard library only."""
+    if a <= 0.0 or x < 0.0:
+        return float("nan")
+    if x == 0.0:
+        return 0.0
+    if x < a + 1.0:
+        return _gammainc_series(a, x)
+    return 1.0 - _gammainc_cf(a, x)
+
+
+def _igamc(a: float, x: float) -> float:
+    """Regularized upper incomplete gamma Q(a, x) = 1 - P(a, x)."""
+    if x <= 0.0:
+        return 1.0
+    return 1.0 - _gammainc(a, x)
 
 
 def _bits_from_bytes(data: bytes) -> List[int]:
@@ -60,7 +123,6 @@ def _bits_from_bytes(data: bytes) -> List[int]:
 
 def _erfc_complement(x: float) -> float:
     """Complementary error function approximation for p-value computation."""
-    # Abramowitz and Stegun approximation
     sign = 1 if x >= 0 else -1
     x = abs(x)
     t = 1.0 / (1.0 + 0.5 * x)
@@ -82,8 +144,7 @@ def _erfc_complement(x: float) -> float:
                         + t
                         * (
                             0.27886807
-                            + t
-                            * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))
+                            + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))
                         )
                     )
                 )
@@ -93,7 +154,21 @@ def _erfc_complement(x: float) -> float:
     return tau if sign >= 0 else 2.0 - tau
 
 
-def monobit_test(bits: List[int]) -> Tuple[float, bool, Optional[str], float]:
+def _psi_squared(m: int, bits: List[int]) -> float:
+    """NIST SP 800-22 psi-squared statistic for block length m (circular)."""
+    if m == 0:
+        return 0.0
+    n = len(bits)
+    counts = [0] * (2**m)
+    for i in range(n):
+        pattern = 0
+        for j in range(m):
+            pattern = (pattern << 1) | bits[(i + j) % n]
+        counts[pattern] += 1
+    return (sum(c * c for c in counts) * (2**m) / n) - n
+
+
+def monobit_test(bits: List[int]) -> Tuple[float, TestStatus, Optional[str], float]:
     """Frequency (monobit) test: proportion of ones should be near 0.5."""
     n = len(bits)
     s = sum(1 if b == 1 else -1 for b in bits)
@@ -102,12 +177,14 @@ def monobit_test(bits: List[int]) -> Tuple[float, bool, Optional[str], float]:
     return _finalize_test(raw)
 
 
-def block_frequency_test(bits: List[int], block_size: int = 128) -> Tuple[float, bool, Optional[str], float]:
+def block_frequency_test(
+    bits: List[int], block_size: int = 128
+) -> Tuple[float, TestStatus, Optional[str], float]:
     """Block frequency test: proportion of ones in each block."""
     n = len(bits)
     num_blocks = n // block_size
     if num_blocks == 0:
-        return 0.0, False, "insufficient data for block frequency test", 0.0
+        return 0.0, "ERROR", "insufficient data for block frequency test", 0.0
 
     proportions = []
     for i in range(num_blocks):
@@ -124,13 +201,13 @@ def block_frequency_test(bits: List[int], block_size: int = 128) -> Tuple[float,
     return _finalize_test(raw)
 
 
-def runs_test(bits: List[int]) -> Tuple[float, bool, Optional[str], float]:
+def runs_test(bits: List[int]) -> Tuple[float, TestStatus, Optional[str], float]:
     """Runs test: oscillation frequency of the bit sequence."""
     n = len(bits)
     ones = sum(bits)
     pi = ones / n
     if abs(pi - 0.5) >= 2 / math.sqrt(n):
-        return 0.0, False, "runs test precondition failed: proportion out of range", pi
+        return 0.0, "FAIL", "runs test precondition failed: proportion out of range", pi
 
     runs = 1
     for i in range(1, n):
@@ -140,7 +217,7 @@ def runs_test(bits: List[int]) -> Tuple[float, bool, Optional[str], float]:
     num = abs(runs - 2 * n * pi * (1 - pi))
     den = 2 * math.sqrt(2 * n) * pi * (1 - pi)
     if den == 0:
-        return 0.0, False, "runs test denominator zero", 0.0
+        return 0.0, "ERROR", "runs test denominator zero", 0.0
     raw = _erfc_complement(num / den)
     return _finalize_test(raw)
 
@@ -159,18 +236,18 @@ def _longest_run_category(max_run: int, block_size: int = 128) -> int:
         if max_run == 8:
             return 4
         return 5
-    # Generic fallback: bucket by run length
     return min(max_run, 5)
 
 
-def longest_run_ones_test(bits: List[int], block_size: int = 128) -> Tuple[float, bool, Optional[str], float]:
+def longest_run_ones_test(
+    bits: List[int], block_size: int = 128
+) -> Tuple[float, TestStatus, Optional[str], float]:
     """Longest run of ones within a block test (prototype approximation)."""
     n = len(bits)
     num_blocks = n // block_size
     if num_blocks == 0:
-        return 0.0, False, "insufficient data for longest run test", 0.0
+        return 0.0, "ERROR", "insufficient data for longest run test", 0.0
 
-    # Expected category proportions for block_size=128 (NIST Table)
     pi = [0.1174, 0.2430, 0.2493, 0.1752, 0.1027, 0.1124]
     max_categories = len(pi)
 
@@ -199,40 +276,27 @@ def longest_run_ones_test(bits: List[int], block_size: int = 128) -> Tuple[float
     return _finalize_test(raw)
 
 
-def serial_test(bits: List[int], m: int = 2) -> Tuple[float, bool, Optional[str], float]:
-    """Serial test for m-bit pattern frequency (two-bit patterns when m=2)."""
+def serial_test(bits: List[int], m: int = 2) -> Tuple[float, TestStatus, Optional[str], float]:
+    """Serial test using NIST SP 800-22 psi-squared and igamc (circular patterns)."""
     n = len(bits)
     if n < m + 1:
-        return 0.0, False, "insufficient data for serial test", 0.0
+        return 0.0, "ERROR", "insufficient data for serial test", 0.0
+    if m < 2:
+        return 0.0, "ERROR", "serial test requires m >= 2", 0.0
 
-    # Count overlapping patterns of length m
-    pattern_count: Dict[tuple, int] = {}
-    for i in range(n - m + 1):
-        pattern = tuple(bits[i : i + m])
-        pattern_count[pattern] = pattern_count.get(pattern, 0) + 1
+    psi_m1 = _psi_squared(m - 1, bits)
+    psi_m = _psi_squared(m, bits)
+    del1 = -psi_m1
+    del2 = psi_m - 2.0 * psi_m1
 
-    num_patterns = 2 ** m
-    expected = (n - m + 1) / num_patterns
-    chi_sq = sum(
-        (pattern_count.get(tuple(int(x) for x in format(p, f"0{m}b")), 0) - expected) ** 2
-        / expected
-        for p in range(num_patterns)
-    )
-    k = num_patterns - 1
-    z = ((chi_sq / k) ** (1 / 3) - (1 - 2 / (9 * k))) / math.sqrt(2 / (9 * k)) if k > 0 else 0
-    raw = _erfc_complement(z / math.sqrt(2))
+    p1 = _igamc((2 ** (m - 1)) / 2.0, del1 / 2.0)
+    p2 = _igamc((2 ** (m - 2)) / 2.0, del2 / 2.0)
+    raw = min(p1, p2)
     return _finalize_test(raw)
 
 
-def run_statistical_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool, Optional[str]]]]:
-    """Run five prototype statistical tests inspired by NIST SP 800-22.
-
-    Args:
-        data: Binary data (e.g. 10KB keystream from demo cipher).
-
-    Returns:
-        Dictionary mapping test name to p-value, pass flag, and optional fail reason.
-    """
+def run_statistical_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool, Optional[str], TestStatus]]]:
+    """Run five prototype statistical tests inspired by NIST SP 800-22."""
     bits = _bits_from_bytes(data)
 
     tests = {
@@ -247,42 +311,35 @@ def run_statistical_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool,
         name: {
             "p_value": pv,
             "raw_p_value": raw_p,
-            "pass": passed,
+            "status": status,
+            "pass": status == "PASS",
             "fail_reason": reason,
-            "p_value_valid": reason is None
-            or not str(reason).startswith("invalid statistical"),
+            "p_value_valid": status != "ERROR",
         }
-        for name, (pv, passed, reason, raw_p) in tests.items()
+        for name, (pv, status, reason, raw_p) in tests.items()
     }
 
 
-def run_nist_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool, Optional[str]]]]:
+def run_nist_suite(data: bytes) -> Dict[str, Dict[str, Union[float, bool, Optional[str], TestStatus]]]:
     """Backward-compatible alias for run_statistical_suite."""
     return run_statistical_suite(data)
 
 
 def format_statistical_results(
-    results: Dict[str, Dict[str, Union[float, bool, Optional[str]]]],
+    results: Dict[str, Dict[str, Union[float, bool, Optional[str], TestStatus]]],
 ) -> str:
     """Format statistical test results as human-readable lines."""
     lines = []
     for name, info in results.items():
-        reason = info.get("fail_reason") or ""
-        if str(reason).startswith("invalid statistical"):
-            raw = float(info.get("raw_p_value", info["p_value"]))
-            lines.append(
-                f"  {name}: raw_p={raw:.6f} [FAIL] "
-                "invalid statistical approximation, outside p-value range [0,1]"
-            )
-        else:
-            status = "PASS" if info["pass"] else "FAIL"
-            line = f"  {name}: p={info['p_value']:.6f} [{status}]"
-            if reason:
-                line += f" ({reason})"
-            lines.append(line)
+        status = str(info.get("status", "FAIL"))
+        line = f"  {name}: p={info['p_value']:.6f} [{status}]"
+        reason = info.get("fail_reason")
+        if reason:
+            line += f" ({reason})"
+        lines.append(line)
     return "\n".join(lines)
 
 
-def format_nist_results(results: Dict[str, Dict[str, Union[float, bool, Optional[str]]]]) -> str:
+def format_nist_results(results: Dict[str, Dict[str, Union[float, bool, Optional[str], TestStatus]]]) -> str:
     """Backward-compatible alias for format_statistical_results."""
     return format_statistical_results(results)

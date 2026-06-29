@@ -7,6 +7,7 @@ Patent Pending - Chessboard Cryptographic System
 """Top-level proof pipeline for engineering prototype validation."""
 
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
@@ -43,12 +44,12 @@ def _write_validation_report(
     """Build markdown validation report content."""
     stats_lines = format_statistical_results(stats)
     avalanche_status = "PASS" if avalanche["pass_threshold_50pct"] else "FAIL"
-    stats_all_pass = all(v["pass"] for v in stats.values())
+    stats_all_pass = all(v.get("status") == "PASS" for v in stats.values())
     stats_invalid = [
-        name
-        for name, v in stats.items()
-        if v.get("fail_reason")
-        and str(v["fail_reason"]).startswith("invalid statistical")
+        name for name, v in stats.items() if v.get("status") == "ERROR"
+    ]
+    stats_failed = [
+        name for name, v in stats.items() if v.get("status") == "FAIL"
     ]
 
     core_ok = (
@@ -95,7 +96,10 @@ def _write_validation_report(
     ]
 
     if stats_invalid:
-        lines.append(f"- **Invalid p-values detected:** {', '.join(stats_invalid)}")
+        lines.append(f"- **Statistical ERROR (invalid p-value or harness):** {', '.join(stats_invalid)}")
+        lines.append("")
+    if stats_failed:
+        lines.append(f"- **Statistical FAIL (below threshold):** {', '.join(stats_failed)}")
         lines.append("")
 
     lines.extend([
@@ -140,11 +144,13 @@ def _run_pytest() -> bool:
     import subprocess
 
     try:
+        env = {**os.environ, "CHESSBOARD_PROOF_CHILD": "1"}
         result = subprocess.run(
             [sys.executable, "-m", "pytest", "tests/", "-q"],
             cwd=str(ROOT),
             capture_output=True,
             text=True,
+            env=env,
         )
         return result.returncode == 0
     except OSError:
@@ -218,6 +224,7 @@ def main() -> int:
                 "raw_p_value": v.get("raw_p_value"),
                 "pass": v["pass"],
                 "fail_reason": v.get("fail_reason"),
+                "status": v.get("status"),
             }
             for k, v in stats.items()
         },
@@ -230,7 +237,7 @@ def main() -> int:
     elapsed = time.time() - start
 
     core_ok = bio_2d and avalanche["pass_threshold_50pct"] and round_trip_ok and bio_3d
-    stats_all_pass = all(v["pass"] for v in stats.values())
+    stats_all_pass = all(v.get("status") == "PASS" for v in stats.values())
     all_ok = core_ok and stats_all_pass and pytest_ok
 
     print("\n" + "=" * 70)

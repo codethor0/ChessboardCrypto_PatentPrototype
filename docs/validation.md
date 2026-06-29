@@ -45,15 +45,17 @@ Expected core results:
 - Encrypt/decrypt round-trip: PASS
 - pytest: PASS
 
-Known warning:
+When all checks pass, final verdict:
 
-- Serial statistical test may report `raw_p=1.569739 [FAIL]` because the prototype approximation can produce invalid raw p-values outside `[0, 1]`.
+`ENGINEERING PROTOTYPE VALIDATED – READY FOR PATENT COUNSEL REVIEW`
 
-Final verdict when warning present:
+Exit code: `0`.
 
-`ENGINEERING PROTOTYPE COMPLETED WITH VALIDATION WARNINGS – REVIEW REQUIRED`
+Each statistical test reports one of:
 
-Exit code may be `1`. This is documented and acceptable.
+- `PASS`: valid p-value meeting the prototype threshold
+- `FAIL`: valid p-value below the prototype threshold
+- `ERROR`: invalid test output, unsupported input, or harness bug (for example p-value outside `[0, 1]`)
 
 ### State-tree demo
 

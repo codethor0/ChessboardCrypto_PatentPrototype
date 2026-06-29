@@ -6,7 +6,7 @@ test:
 	$(PYTHON) -m pytest -q
 
 proof:
-	-$(PYTHON) run_full_proof.py
+	$(PYTHON) run_full_proof.py
 
 demo:
 	$(PYTHON) scripts/state_tree_demo.py
