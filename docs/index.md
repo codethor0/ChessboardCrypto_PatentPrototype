@@ -20,6 +20,8 @@ Public research and proof-of-concept documentation index.
 
 - [Patent Notice](patent_notice.md)
 - [Public Disclosure](public_disclosure.md)
+- [Public Release Doctrine](public_release_doctrine.md)
+- [Final Public Release Validation](final_public_release_validation.md)
 - [Contributing](contributing.md)
 - [Roadmap](roadmap.md)
 

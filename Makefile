@@ -15,7 +15,7 @@ docs:
 	@echo "Public documentation lives under docs/. See docs/index.md."
 
 bundle:
-	./scripts/create_public_staging_bundle.sh
+	@echo "Public source export: use git archive or rsync with exclusions from docs/public_release_doctrine.md"
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

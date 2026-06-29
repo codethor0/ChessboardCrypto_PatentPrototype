@@ -34,6 +34,7 @@ Do not commit secrets, `.env` files, private keys, or internal employer material
 
 Before publishing:
 
-- run `scripts/create_public_staging_bundle.sh`
-- confirm the bundle check prints `PASS: public bundle is clean`
 - inspect README, patent notice, and disclosure documents manually
+- confirm no secrets, private materials, local paths, or tool attribution are present
+- run local and Docker validation per [docs/public_release_doctrine.md](docs/public_release_doctrine.md)
+- record results in [docs/final_public_release_validation.md](docs/final_public_release_validation.md)

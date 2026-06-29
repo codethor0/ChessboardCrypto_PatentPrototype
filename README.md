@@ -18,6 +18,24 @@ Adversarial State-Tree Cryptographic Access Control binds protected data access 
 
 The chessboard traversal and S-box code in `src/` is an optional deterministic state-permutation embodiment. It demonstrates one way to generate bijective state permutations for research and validation. It is not the full scope of the architecture.
 
+## System Flow
+
+```mermaid
+flowchart TD
+    A[Telemetry and Policy Context] --> B[Security-State Vector]
+    B --> C[Adversarial State-Transition Graph]
+    C --> D[Path Validation]
+    D -->|Valid Path| E[Key Release or Protected Action]
+    D -->|Invalid Path| F[Restricted Output or Decoy Branch]
+    F --> G[Honeytoken, Alert, or Containment]
+    E --> H[Audit Transcript]
+    G --> H
+```
+
+The diagram shows the public proof-of-concept flow. Telemetry and policy context are normalized into a security-state vector, validated against an adversarial state-transition graph, and used to decide whether to release protected material, authorize a protected action, restrict output, or route the request into a deception branch.
+
+Additional diagrams are in [docs/mermaid_diagrams.md](docs/mermaid_diagrams.md).
+
 ---
 
 ## Problem
@@ -120,7 +138,7 @@ See [docs/validation.md](docs/validation.md) for expected outputs, known warning
 
 ## Mermaid Diagrams
 
-Architecture and flow diagrams are in [docs/mermaid_diagrams.md](docs/mermaid_diagrams.md).
+The main system flow appears near the top of this README. The full diagram set is in [docs/mermaid_diagrams.md](docs/mermaid_diagrams.md).
 
 ---
 
