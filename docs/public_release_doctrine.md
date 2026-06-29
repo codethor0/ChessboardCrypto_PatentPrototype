@@ -86,7 +86,7 @@ Inspired by **NIST SSDF** testing and clear consumer communication.
 Required local results:
 
 ```bash
-python3.11 -m pytest -q          # 39 passed
+python3.11 -m pytest -q          # current pytest suite passes
 python3.11 scripts/state_tree_demo.py   # PASS
 python3.11 run_full_proof.py      # exit 0 when all proof checks pass
 
@@ -200,7 +200,7 @@ Required exclusions:
 - [ ] Emoji scan: zero matches
 - [ ] Secret scan: no real credentials
 - [ ] Hygiene scan: no excluded artifacts in public source
-- [ ] pytest: 39 passed
+- [ ] pytest: current pytest suite passes
 - [ ] state_tree_demo: PASS
 - [ ] run_full_proof: exit 0 with all checks PASS
 - [ ] Docker validation: pass or documented unavailable
