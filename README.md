@@ -1,5 +1,57 @@
 # Adversarial State-Tree Cryptographic Access Control
 
+[![Validate](https://github.com/codethor0/ChessboardCrypto_PatentPrototype/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/codethor0/ChessboardCrypto_PatentPrototype/actions/workflows/validate.yml)
+[![CodeQL](https://github.com/codethor0/ChessboardCrypto_PatentPrototype/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/codethor0/ChessboardCrypto_PatentPrototype/actions/workflows/codeql.yml)
+
+## High-Level System Architecture
+
+```mermaid
+flowchart TB
+    subgraph intake [Telemetry Intake]
+        EP[Endpoint Events]
+        ID[Identity Events]
+        AL[Alert Events]
+        PL[Policy Store]
+    end
+
+    subgraph core [State-Tree Controller]
+        SN[State Normalizer]
+        PC[Policy Compiler]
+        STG[State-Tree Generator]
+        TV[Transition Validator]
+    end
+
+    subgraph crypto [Cryptographic Layer]
+        CM[Cryptographic Material Manager]
+        PG[Protected Action Gate]
+    end
+
+    subgraph response [Response Layer]
+        DB[Deception Branch Manager]
+        RO[Response Orchestrator]
+        ALG[Audit Logger]
+    end
+
+    REQ[Access Request] --> TV
+    EP --> SN
+    ID --> SN
+    AL --> SN
+    PL --> PC
+    SN --> STG
+    PC --> STG
+    STG --> TV
+    TV -->|valid path| CM
+    TV -->|valid path| PG
+    TV -->|invalid path| DB
+    TV -->|invalid path| RO
+    CM --> ALG
+    PG --> ALG
+    DB --> ALG
+    RO --> ALG
+```
+
+The high-level architecture diagram shows telemetry intake, state-tree validation, cryptographic release on valid paths, and defensive response branches on invalid paths.
+
 This repository presents an engineering proof of concept for telemetry-bound cryptographic access control and deception. The system models security context as a constrained state-transition graph. Protected data, key material, or sensitive security actions are released only after a valid transition path is verified. Invalid paths can trigger denial, restricted output, decoys, honeytokens, audit logging, or containment.
 
 This repository is a public technical disclosure and engineering proof of concept authored by Isaac Kong Thor.
@@ -138,7 +190,7 @@ See [docs/validation.md](docs/validation.md) for expected outputs, known warning
 
 ## Mermaid Diagrams
 
-The main system flow appears near the top of this README. The full diagram set is in [docs/mermaid_diagrams.md](docs/mermaid_diagrams.md).
+The main high-level architecture diagram appears near the top of this README. The System Flow section below shows the proof-of-concept decision path. The full diagram set is in [docs/mermaid_diagrams.md](docs/mermaid_diagrams.md).
 
 ---
 
