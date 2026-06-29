@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environments
+.venv/
+.env
+
+# macOS
+.DS_Store
+._*
+
+# Local tooling
+.cursor/
+.githooks/
+
+# Generated validation artifacts
+docs/validation_report.md
+docs/test_vectors.json
+
+# Local release bundles
+*.zip
+*.tar.gz

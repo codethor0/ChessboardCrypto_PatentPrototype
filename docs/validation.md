@@ -33,7 +33,7 @@ docker compose run --rm app make demo
 
 Expected: all tests pass, including state-tree scenarios in `tests/test_state_tree.py`.
 
-Current baseline: 39 tests (36 existing + 3 new state-tree tests).
+Current baseline: 43 tests (including state-tree and statistical harness regression tests).
 
 ### Proof pipeline
 

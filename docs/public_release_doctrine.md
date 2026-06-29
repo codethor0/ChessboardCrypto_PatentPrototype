@@ -96,7 +96,7 @@ Statistical result classes:
 - `FAIL`: valid p-value below threshold
 - `ERROR`: invalid p-value outside `[0, 1]`, NaN, infinite, or unsupported test condition
 make test                         # PASS
-make proof                        # exit 1 tolerated only for same warning
+make proof                        # exit 0 when all proof checks pass
 make demo                         # PASS
 ```
 
